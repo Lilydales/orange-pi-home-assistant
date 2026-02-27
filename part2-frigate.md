@@ -2,7 +2,7 @@
 
 **Time estimate:** 30-60 minutes  
 **Difficulty:** Intermediate  
-**Status:** ✅ Running - Ready for camera config
+**Status:** ✅ Complete
 
 ---
 

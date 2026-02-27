@@ -2,7 +2,7 @@
 
 **Time estimate:** 30-60 minutes  
 **Difficulty:** Intermediate  
-**Status:** 🔄 In Progress
+**Status:** ✅ Complete
 
 ---
 
@@ -21,7 +21,6 @@ This part covers:
 ### Quick Access
 
 - **URL:** http://<YOUR_ORANGE_PI_IP>:8096
-- **Status:** Running ✅
 
 ### Setup Steps
 
@@ -36,8 +35,6 @@ This part covers:
 2. Search for **"Jellyfin"**
 3. Enter URL: `http://<YOUR_ORANGE_PI_IP>:8096`
 4. Enter your Jellyfin credentials
-
-📖 Full details: [Part 3 - Jellyfin](./part3-media-voice.md)
 
 ---
 
@@ -79,6 +76,8 @@ sudo chown -R $USER:$USER /opt/wyoming
 
 ### Create docker-compose.yml
 
+> **Important:** The `--uri tcp://0.0.0.0:PORT` is required for Home Assistant to connect. Without it, services only listen on localhost.
+
 ```bash
 cat > /opt/wyoming/docker-compose.yml << "EOF"
 services:
@@ -94,7 +93,7 @@ services:
       - ./whisper/data:/cache
     environment:
       - TZ=Australia/Sydney
-    command: --model small-int8 --language en
+    command: --model small-int8 --language en --uri tcp://0.0.0.0:10200
 
   # Text-to-Speech (Piper)
   piper:
@@ -107,7 +106,7 @@ services:
       - ./piper/data:/data
     environment:
       - TZ=Australia/Sydney
-    command: --voice en_US-lessac-low
+    command: --voice en_US-lessac-low --uri tcp://0.0.0.0:10201
 
   # Wake Word Detection
   openwakeword:
@@ -129,6 +128,18 @@ EOF
 cd /opt/wyoming && docker compose up -d
 ```
 
+### Verify Services
+
+```bash
+# Check containers are running
+docker ps | grep -E "whisper|piper|openwakeword"
+
+# Test connectivity (replace with your IP)
+nc -v <YOUR_ORANGE_PI_IP> 10200
+nc -v <YOUR_ORANGE_PI_IP> 10201
+nc -v <YOUR_ORANGE_PI_IP> 10400
+```
+
 ---
 
 ## Step 3.2: Configure Home Assistant Voice ⬜
@@ -137,7 +148,7 @@ cd /opt/wyoming && docker compose up -d
 
 1. **Settings → Devices & Services**
 2. Click **"+ Add Integration"**
-3. Search for **"Wyoming"**
+3. Search for **"Wyoming"** (not Whisper or Piper)
 4. Add each service:
 
 | Service | Host | Port |
@@ -177,6 +188,27 @@ Custom wake words can be trained at: https://github.com/dscripka/openWakeWord
 
 ## Troubleshooting
 
+### Services show "Ready" but can't connect from Home Assistant
+
+This is usually because the service is only listening on `localhost`. Make sure you have `--uri tcp://0.0.0.0:PORT` in the command.
+
+Test from Home Assistant container:
+```bash
+docker exec homeassistant python3 -c "
+import socket
+for port in [10200, 10201, 10400]:
+    s = socket.socket()
+    s.settimeout(2)
+    try:
+        s.connect(('<YOUR_ORANGE_PI_IP>', port))
+        print(f'Port {port}: OK')
+    except Exception as e:
+        print(f'Port {port}: Failed - {e}')
+    finally:
+        s.close()
+"
+```
+
 ### Whisper too slow on first run
 - First transcription loads the model (~30 seconds)
 - Subsequent transcriptions are faster
@@ -184,7 +216,7 @@ Custom wake words can be trained at: https://github.com/dscripka/openWakeWord
 
 ### Piper voice not found
 - Check available voices: https://github.com/rhasspy/piper/blob/master/VOICES.md
-- Update command: `--voice en_US-lessac-low`
+- Valid voice: `--voice en_US-lessac-low`
 
 ### Wake word not detecting
 - Check microphone is working: `arecord -l`
@@ -205,10 +237,15 @@ docker logs -f piper
 docker logs -f openwakeword
 
 # Restart a service
-docker compose restart whisper
+cd /opt/wyoming && docker compose restart whisper
 
 # Check ports
 netstat -tlnp | grep -E "10200|10201|10400"
+
+# Test connectivity from host
+nc -v localhost 10200
+nc -v localhost 10201
+nc -v localhost 10400
 ```
 
 ---
@@ -216,9 +253,9 @@ netstat -tlnp | grep -E "10200|10201|10400"
 ## Verification Checklist
 
 **Voice Assistant:**
-- [ ] Whisper running on port 10200
-- [ ] Piper running on port 10201
-- [ ] openWakeWord running on port 10400
+- [x] Whisper running on port 10200
+- [x] Piper running on port 10201
+- [x] openWakeWord running on port 10400
 - [ ] Wyoming integration added in Home Assistant
 - [ ] Voice pipeline created
 - [ ] Wake word detection working
@@ -230,11 +267,12 @@ netstat -tlnp | grep -E "10200|10201|10400"
 | Date | Step | Status |
 |------|------|--------|
 | 2026-02-27 22:27 | Jellyfin installed | ✅ Complete |
-| 2026-02-27 22:38 | Jellyfin HA integration | ✅ Straightforward |
-| 2026-02-27 23:03 | Wyoming services installed | ✅ Running |
+| 2026-02-27 22:38 | Jellyfin HA integration | ✅ Complete |
+| 2026-02-27 23:03 | Wyoming services installed | ✅ Complete |
 | 2026-02-27 23:03 | Whisper (STT) running | ✅ Port 10200 |
 | 2026-02-27 23:03 | Piper (TTS) running | ✅ Port 10201 |
 | 2026-02-27 23:03 | openWakeWord running | ✅ Port 10400 |
+| 2026-02-27 23:24 | Fixed TCP binding issue | ✅ Added --uri flag |
 
 ---
 
@@ -248,4 +286,4 @@ netstat -tlnp | grep -E "10200|10201|10400"
 ---
 
 *Part 3 - Media Server & Voice Assistant*  
-*Last updated: 2026-02-27 23:03 GMT+11*
+*Last updated: 2026-02-27 23:30 GMT+11*
