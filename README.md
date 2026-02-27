@@ -22,11 +22,11 @@ Complete guide to setting up a smart home hub on Orange Pi 5 with WiFi/BT module
 
 ## 🔧 Hardware Required
 
-- Orange Pi 5 (8GB or 16GB)
-- microSD card 16GB+ (Class 10)
+- Orange Pi 5 (8GB) 
+- microSD card 16GB+ (Class 10) (Mine one is 64GB got from Facebook Market Place ~ $10)
 - AP6275P M.2 WiFi 6 + BT 5.0 module
-- Power supply (5V 4A USB-C)
-- Camera(s) for Frigate (optional)
+- Power supply (5V 4A USB-C) (~$20)
+- Camera(s) for Frigate (optional) (~$80)
 
 ## 🚀 Quick Start
 
