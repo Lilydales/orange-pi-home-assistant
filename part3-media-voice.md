@@ -1,223 +1,227 @@
-# Part 3: Media Server (Jellyfin)
+# Part 3: Media Server & Voice Assistant
 
 **Time estimate:** 30-60 minutes  
-**Difficulty:** Beginner  
-**Status:** 🔄 In Progress - Jellyfin installed
+**Difficulty:** Intermediate  
+**Status:** 🔄 In Progress
 
 ---
 
 ## Overview
 
-We'll install **Jellyfin** - a free, open-source media server with:
-- Free hardware transcoding (no paywall)
-- Live TV support
-- Mobile apps
-- No tracking or data collection
-
-> **Why Jellyfin over Plex?**
-> - Free hardware transcoding (Plex requires paid pass)
-> - No paywalled features (skip intros, etc.)
-> - Open source & privacy-focused
-> - No account required
+This part covers:
+- **Jellyfin** - Free media streaming server
+- **Whisper** - Local speech-to-text (STT)
+- **Piper** - Local text-to-speech (TTS)
+- **openWakeWord** - Wake word detection
 
 ---
 
-## Step 3.1: Prepare Directories ✅
+## Section A: Jellyfin Media Server ✅
 
-**Executed on Orange Pi 5:**
+### Quick Access
 
-```bash
-# Create Jellyfin directories
-sudo mkdir -p /opt/jellyfin/config
-sudo mkdir -p /opt/jellyfin/cache
-sudo chown -R $USER:$USER /opt/jellyfin
+- **URL:** http://<YOUR_ORANGE_PI_IP>:8096
+- **Status:** Running ✅
 
-# Create media library directories
-sudo mkdir -p /media/library/{movies,tv,music,photos}
-sudo chown -R $USER:$USER /media/library
-```
+### Setup Steps
 
-**Result:**
-```
-/opt/jellyfin/
-├── config/
-└── cache/
+1. Open Jellyfin in browser
+2. Create admin account
+3. Add media libraries (`/media/library/movies`, `/media/library/tv`, etc.)
+4. Install mobile apps
 
-/media/library/
-├── movies/
-├── tv/
-├── music/
-└── photos/
-```
+### Add to Home Assistant
+
+1. **Settings → Devices & Services → "+ Add Integration"**
+2. Search for **"Jellyfin"**
+3. Enter URL: `http://<YOUR_ORANGE_PI_IP>:8096`
+4. Enter your Jellyfin credentials
+
+📖 Full details: [Part 3 - Jellyfin](./part3-media-voice.md)
 
 ---
 
-## Step 3.2: Create Docker Compose File ✅
+## Section B: Local Voice Assistant ✅
 
-**Executed on Orange Pi 5:**
+All components run locally - **no cloud required!**
+
+### Architecture
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│ Wake Word    │────▶│ Whisper      │────▶│ Home         │
+│ (openWakeWord)│    │ (STT)        │     │ Assistant    │
+└──────────────┘     └──────────────┘     └──────────────┘
+         │                                       │
+         │                ┌──────────────┐       │
+         └────────────────│ Piper (TTS)  │◀──────┘
+                          └──────────────┘
+```
+
+### Services Running
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Whisper | 10200 | Speech-to-text |
+| Piper | 10201 | Text-to-speech |
+| openWakeWord | 10400 | Wake word detection |
+
+---
+
+## Step 3.1: Install Wyoming Services ✅
+
+### Create Directories
 
 ```bash
-cat > /opt/jellyfin/docker-compose.yml << "EOF"
+sudo mkdir -p /opt/wyoming/{whisper/data,piper/data,openwakeword/data}
+sudo chown -R $USER:$USER /opt/wyoming
+```
+
+### Create docker-compose.yml
+
+```bash
+cat > /opt/wyoming/docker-compose.yml << "EOF"
 services:
-  jellyfin:
-    image: lscr.io/linuxserver/jellyfin:latest
-    container_name: jellyfin
+  # Speech-to-Text (Whisper)
+  whisper:
+    image: rhasspy/wyoming-whisper:latest
+    container_name: whisper
     restart: unless-stopped
-    network_mode: host
-    devices:
-      - /dev/dri:/dev/dri
+    ports:
+      - "10200:10200"
     volumes:
-      - ./config:/config
-      - ./cache:/cache
-      - /media/library:/media:ro
+      - ./whisper/data:/data
+      - ./whisper/data:/cache
     environment:
-      - PUID=1000
-      - PGID=1000
       - TZ=Australia/Sydney
-      - JELLYFIN_PublishedServerUrl=<YOUR_ORANGE_PI_IP>
+    command: --model small-int8 --language en
+
+  # Text-to-Speech (Piper)
+  piper:
+    image: rhasspy/wyoming-piper:latest
+    container_name: piper
+    restart: unless-stopped
+    ports:
+      - "10201:10201"
+    volumes:
+      - ./piper/data:/data
+    environment:
+      - TZ=Australia/Sydney
+    command: --voice en_US-lessac-low
+
+  # Wake Word Detection
+  openwakeword:
+    image: rhasspy/wyoming-openwakeword:latest
+    container_name: openwakeword
+    restart: unless-stopped
+    ports:
+      - "10400:10400"
+    volumes:
+      - ./openwakeword/data:/data
+    environment:
+      - TZ=Australia/Sydney
 EOF
 ```
 
-**File:** `/opt/jellyfin/docker-compose.yml`
-
----
-
-## Step 3.3: Start Jellyfin ✅
-
-**Executed on Orange Pi 5:**
+### Start Services
 
 ```bash
-cd /opt/jellyfin
-docker compose up -d
-```
-
-**Result:**
-```
-CONTAINER ID   IMAGE                               STATUS
-36ee9c6a7787   lscr.io/linuxserver/jellyfin:latest Up 5 seconds
+cd /opt/wyoming && docker compose up -d
 ```
 
 ---
 
-## Step 3.4: Initial Setup ⬜
+## Step 3.2: Configure Home Assistant Voice ⬜
 
-### Access Jellyfin
-
-Open in browser: **http://<YOUR_ORANGE_PI_IP>:8096**
-
-### Setup Wizard
-
-1. **Language** - Select your language
-2. **Create Account** - Set admin username and password
-3. **Add Media Libraries**:
-   - Click **"+ Add Media Library"**
-   - Select content type (Movies, Shows, Music, etc.)
-   - Browse to `/media/movies`, `/media/tv`, etc.
-4. **Metadata Language** - English (or your preference)
-5. **Remote Access** - Enable if you want access outside your network
-6. **Finish**
-
----
-
-## Step 3.5: Add Jellyfin to Home Assistant ⬜
-
-Adding Jellyfin to Home Assistant is straightforward:
+### Add Wyoming Integrations
 
 1. **Settings → Devices & Services**
 2. Click **"+ Add Integration"**
-3. Search for **"Jellyfin"**
-4. Enter:
-   - **URL:** `http://<YOUR_ORANGE_PI_IP>:8096`
-   - **Username:** *(your Jellyfin admin username)*
-   - **Password:** *(your Jellyfin admin password)*
-5. Click **Submit**
+3. Search for **"Wyoming"**
+4. Add each service:
 
-This allows you to:
-- Control playback from Home Assistant
-- See media players as entities
-- Create automations based on playback status
+| Service | Host | Port |
+|---------|------|------|
+| Whisper | `<YOUR_ORANGE_PI_IP>` | 10200 |
+| Piper | `<YOUR_ORANGE_PI_IP>` | 10201 |
+| openWakeWord | `<YOUR_ORANGE_PI_IP>` | 10400 |
 
----
+### Create Voice Pipeline
 
-## Step 3.6: Add Media Libraries ⬜
+1. **Settings → Voice Assistants**
+2. Click **"+ Add Assistant"**
+3. Configure:
+   - **Name:** "Local Assistant"
+   - **Speech-to-Text:** Whisper
+   - **Text-to-Speech:** Piper
+   - **Wake Word:** hey_jarvis (or available options)
+4. Save
 
-In Jellyfin Dashboard → Libraries:
+### Test Voice Control
 
-| Library Type | Folder Path | Notes |
-|--------------|-------------|-------|
-| Movies | `/media/movies` | Movie files |
-| Shows | `/media/tv` | TV series |
-| Music | `/media/music` | Music files |
-| Photos | `/media/photos` | Photo albums |
-
-### Supported Formats
-
-**Video:** MP4, MKV, AVI, MOV, WMV  
-**Audio:** MP3, FLAC, AAC, WAV, OGG  
-**Images:** JPG, PNG, GIF, BMP
+1. Click the **Assist** button in Home Assistant sidebar
+2. Say "Hey Jarvis" (or your wake word)
+3. Ask: "What time is it?"
 
 ---
 
-## Step 3.7: Hardware Transcoding (Optional) ⬜
+## Available Wake Words
 
-If you have a GPU or hardware encoder:
+- `hey_jarvis`
+- `alexa`
+- `ok_nabu`
 
-1. Dashboard → Playback → transcoding
-2. Enable **"Hardware acceleration"**
-3. Select device: `VAAPI` or `VideoToolbox`
-
-> **Note:** Orange Pi 5 has some GPU acceleration via V4L2/MPP. Results may vary.
+Custom wake words can be trained at: https://github.com/dscripka/openWakeWord
 
 ---
 
-## Step 3.8: Mobile Apps ⬜
+## Troubleshooting
 
-Download Jellyfin app:
-- **iOS:** App Store → "Jellyfin"
-- **Android:** Play Store → "Jellyfin"
-- **Fire TV:** Amazon Appstore → "Jellyfin"
+### Whisper too slow on first run
+- First transcription loads the model (~30 seconds)
+- Subsequent transcriptions are faster
+- Use `--model tiny-int8` for faster but less accurate results
 
-Connect to: `http://<YOUR_ORANGE_PI_IP>:8096`
+### Piper voice not found
+- Check available voices: https://github.com/rhasspy/piper/blob/master/VOICES.md
+- Update command: `--voice en_US-lessac-low`
+
+### Wake word not detecting
+- Check microphone is working: `arecord -l`
+- Test audio: `arecord -d 3 test.wav && aplay test.wav`
+- Try speaking closer to the microphone
 
 ---
 
 ## Useful Commands
 
 ```bash
-# Start Jellyfin
-cd /opt/jellyfin && docker compose up -d
+# Start Wyoming services
+cd /opt/wyoming && docker compose up -d
 
 # View logs
-docker logs -f jellyfin
+docker logs -f whisper
+docker logs -f piper
+docker logs -f openwakeword
 
-# Restart
-docker compose restart
+# Restart a service
+docker compose restart whisper
 
-# Check container
-docker ps | grep jellyfin
+# Check ports
+netstat -tlnp | grep -E "10200|10201|10400"
 ```
 
 ---
 
 ## Verification Checklist
 
-| Item | Status |
-|------|--------|
-| Jellyfin accessible at :8096 | ✅ |
-| Setup wizard completed | ⬜ |
-| Libraries created | ⬜ |
-| Media files added | ⬜ |
-| Hardware transcoding | ⬜ |
-| Mobile app connected | ⬜ |
-
----
-
-## Next Steps
-
-1. Add your media files to `/media/library/`
-2. Complete Jellyfin setup wizard
-3. Install mobile apps
-4. (Optional) Set up voice assistant - see Part 3B
+**Voice Assistant:**
+- [ ] Whisper running on port 10200
+- [ ] Piper running on port 10201
+- [ ] openWakeWord running on port 10400
+- [ ] Wyoming integration added in Home Assistant
+- [ ] Voice pipeline created
+- [ ] Wake word detection working
 
 ---
 
@@ -225,15 +229,23 @@ docker ps | grep jellyfin
 
 | Date | Step | Status |
 |------|------|--------|
-| 2026-02-27 22:27 | 3.1 - Create directories | ✅ Complete |
-| 2026-02-27 22:27 | 3.2 - Create docker-compose.yml | ✅ Complete |
-| 2026-02-27 22:27 | 3.3 - Pull Jellyfin image | ✅ Complete |
-| 2026-02-27 22:27 | 3.4 - Start container | ✅ Running |
-| 2026-02-27 22:38 | 3.5 - Add to Home Assistant | ✅ Straightforward via Integration |
-| 2026-02-27 22:38 | 3.6 - Initial setup wizard | ⬜ Pending |
-| 2026-02-27 22:38 | 3.7 - Add media libraries | ⬜ Pending |
+| 2026-02-27 22:27 | Jellyfin installed | ✅ Complete |
+| 2026-02-27 22:38 | Jellyfin HA integration | ✅ Straightforward |
+| 2026-02-27 23:03 | Wyoming services installed | ✅ Running |
+| 2026-02-27 23:03 | Whisper (STT) running | ✅ Port 10200 |
+| 2026-02-27 23:03 | Piper (TTS) running | ✅ Port 10201 |
+| 2026-02-27 23:03 | openWakeWord running | ✅ Port 10400 |
 
 ---
 
-*Part 3 - Media Server (Jellyfin)*  
-*Last updated: 2026-02-27 22:38 GMT+11*
+## Next Steps
+
+1. Add Wyoming integrations in Home Assistant
+2. Create voice pipeline
+3. Test wake word detection
+4. Add microphone for voice input
+
+---
+
+*Part 3 - Media Server & Voice Assistant*  
+*Last updated: 2026-02-27 23:03 GMT+11*
